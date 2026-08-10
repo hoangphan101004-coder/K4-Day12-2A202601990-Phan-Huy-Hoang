@@ -106,21 +106,28 @@ jobs:
             fi
           fi
 
+          redis_service_name=$(echo "$services" | jq -r \
+            '.data.project.services.edges[]?.node
+             | select(.name | ascii_downcase | contains("redis"))
+             | .name' | head -n 1)
+
           public_url="${{ vars.PUBLIC_URL }}"
           if [ -z "$public_url" ]; then
-            public_url="https://k4-day12-2a202601990-phan-huy-hoang.up.railway.app"
+            public_url="https://k4-day12-2a202601990-phan-huy-hoang-production.up.railway.app"
           fi
           echo "RAILWAY_PROJECT_ID=$project_id" >> "$GITHUB_ENV"
           echo "RAILWAY_ENVIRONMENT_ID=$environment_id" >> "$GITHUB_ENV"
           echo "RAILWAY_SERVICE_ID=$service_id" >> "$GITHUB_ENV"
+          echo "RAILWAY_REDIS_SERVICE_NAME=$redis_service_name" >> "$GITHUB_ENV"
           echo "PUBLIC_URL=$public_url" >> "$GITHUB_ENV"
 
       - name: Validate Deploy Configuration
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          DEPLOY_API_TOKEN: ${{ secrets.DEPLOY_API_TOKEN }}
         run: |
           missing=0
-          for name in RAILWAY_TOKEN RAILWAY_PROJECT_ID RAILWAY_ENVIRONMENT_ID RAILWAY_SERVICE_ID PUBLIC_URL; do
+          for name in RAILWAY_TOKEN DEPLOY_API_TOKEN RAILWAY_PROJECT_ID RAILWAY_ENVIRONMENT_ID RAILWAY_SERVICE_ID PUBLIC_URL; do
             if [ -z "${!name}" ]; then
               echo "::error::Missing GitHub Actions configuration: $name"
               missing=1
@@ -134,11 +141,51 @@ jobs:
             *) echo "::error::PUBLIC_URL must start with https://"; exit 1 ;;
           esac
 
+      - name: Configure Railway Resources
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          DEPLOY_API_TOKEN: ${{ secrets.DEPLOY_API_TOKEN }}
+        run: |
+          npm install --global @railway/cli
+          railway link --json \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_SERVICE_ID" >/dev/null
+
+          redis_service_name="$RAILWAY_REDIS_SERVICE_NAME"
+          if [ -z "$redis_service_name" ]; then
+            redis_result=$(railway add --database redis --json)
+            redis_service_name=$(printf '%s\n' "$redis_result" | jq -r \
+              '.name // .service.name // empty')
+            if [ -z "$redis_service_name" ]; then
+              redis_service_name="Redis"
+            fi
+            echo "::notice title=Railway Redis::Created service $redis_service_name"
+          fi
+
+          printf '%s' "$DEPLOY_API_TOKEN" | railway variable set API_TOKEN \
+            --stdin --skip-deploys \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_SERVICE_ID" >/dev/null
+
+          redis_reference='$'
+          redis_reference="${redis_reference}{{${redis_service_name}.REDIS_URL}}"
+          railway variable set \
+            "REDIS_URL=$redis_reference" \
+            "BUCKET_CAPACITY=10" \
+            "REFILL_PER_MINUTE=10" \
+            "DAILY_BUDGET_USD=1.0" \
+            "LOG_LEVEL=INFO" \
+            --skip-deploys \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_SERVICE_ID" >/dev/null
+
       - name: Deploy to Cloud
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
-          npm install --global @railway/cli
           set +e
           deploy_output=$(railway up --ci \
             --project "$RAILWAY_PROJECT_ID" \
