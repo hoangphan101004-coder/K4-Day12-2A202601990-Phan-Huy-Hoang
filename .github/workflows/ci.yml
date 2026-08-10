@@ -168,6 +168,35 @@ jobs:
             exit "$deploy_status"
           fi
 
+      - name: Ensure Public Domain
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          domains=$(railway domain list --json \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_SERVICE_ID")
+          domain=$(printf '%s\n' "$domains" | jq -r \
+            '.. | strings | select(test("\\.(up\\.railway\\.app|railway\\.app)$"))' \
+            | head -n 1)
+
+          if [ -z "$domain" ]; then
+            created=$(railway domain --json \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --service "$RAILWAY_SERVICE_ID")
+            domain=$(printf '%s\n' "$created" | jq -r \
+              '.. | strings | select(test("\\.(up\\.railway\\.app|railway\\.app)$"))' \
+              | head -n 1)
+          fi
+
+          if [ -z "$domain" ]; then
+            echo "::error::Unable to resolve a public Railway domain"
+            exit 1
+          fi
+          echo "PUBLIC_URL=https://$domain" >> "$GITHUB_ENV"
+          echo "::notice title=PUBLIC_URL::https://$domain"
+
       - name: Smoke Test
         run: |
           BASE_URL="${PUBLIC_URL%/}"
