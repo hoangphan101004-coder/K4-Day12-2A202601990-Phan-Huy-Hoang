@@ -58,6 +58,39 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Discover Railway Context
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          token_info=$(curl --fail --silent --show-error \
+            https://backboard.railway.com/graphql/v2 \
+            -H "Project-Access-Token: $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"query":"query { projectToken { projectId environmentId } }"}')
+
+          project_id=$(echo "$token_info" | jq -r '.data.projectToken.projectId // empty')
+          environment_id=$(echo "$token_info" | jq -r '.data.projectToken.environmentId // empty')
+          if [ -z "$project_id" ] || [ -z "$environment_id" ]; then
+            echo "::error::Unable to discover Railway project context from RAILWAY_TOKEN"
+            echo "$token_info" | jq -c '{errors: .errors}'
+            exit 1
+          fi
+
+          echo "::notice title=RAILWAY_PROJECT_ID::$project_id"
+          echo "::notice title=RAILWAY_ENVIRONMENT_ID::$environment_id"
+
+          query=$(jq -nc --arg id "$project_id" '{
+            query: "query($id: String!) { project(id: $id) { services { edges { node { id name } } } } }",
+            variables: {id: $id}
+          }')
+          services=$(curl --fail --silent --show-error \
+            https://backboard.railway.com/graphql/v2 \
+            -H "Project-Access-Token: $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "$query")
+          echo "$services" | jq -r \
+            '.data.project.services.edges[]?.node | "::notice title=RAILWAY_SERVICE_ID::\(.name)=\(.id)"'
+
       - name: Validate Deploy Configuration
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
