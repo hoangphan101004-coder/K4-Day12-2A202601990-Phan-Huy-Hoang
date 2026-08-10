@@ -153,6 +153,18 @@ jobs:
               | tail -n 12 \
               | tr '\n' ' ')
             echo "::error title=Railway deploy failed::$summary"
+
+            runtime_logs=$(railway logs --latest --lines 80 \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --service "$RAILWAY_SERVICE_ID" 2>&1 || true)
+            printf '%s\n' "$runtime_logs"
+            runtime_summary=$(printf '%s\n' "$runtime_logs" \
+              | sed -r 's/\x1B\[[0-9;]*[mK]//g' \
+              | tail -n 20 \
+              | tr '\n' ' ' \
+              | cut -c 1-3000)
+            echo "::error title=Railway runtime logs::$runtime_summary"
             exit "$deploy_status"
           fi
 
