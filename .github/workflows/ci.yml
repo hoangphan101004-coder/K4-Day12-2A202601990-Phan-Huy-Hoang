@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -42,7 +42,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Build Docker Image
         run: |
@@ -56,7 +56,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Discover Railway Context
         env:
@@ -139,10 +139,22 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           npm install --global @railway/cli
-          railway up --ci \
+          set +e
+          deploy_output=$(railway up --ci \
             --project "$RAILWAY_PROJECT_ID" \
             --environment "$RAILWAY_ENVIRONMENT_ID" \
-            --service "$RAILWAY_SERVICE_ID"
+            --service "$RAILWAY_SERVICE_ID" 2>&1)
+          deploy_status=$?
+          set -e
+          printf '%s\n' "$deploy_output"
+          if [ "$deploy_status" -ne 0 ]; then
+            summary=$(printf '%s\n' "$deploy_output" \
+              | sed -r 's/\x1B\[[0-9;]*[mK]//g' \
+              | tail -n 12 \
+              | tr '\n' ' ')
+            echo "::error title=Railway deploy failed::$summary"
+            exit "$deploy_status"
+          fi
 
       - name: Smoke Test
         run: |
