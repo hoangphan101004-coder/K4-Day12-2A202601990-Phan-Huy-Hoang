@@ -18,7 +18,7 @@
 
 | Mục | Nội dung |
 |-----|----------|
-| Public URL | https://k4-day12-2a202601990-phan-huy-hoang.up.railway.app |
+| Public URL | https://k4-day12-2a202601990-phan-huy-hoang-production.up.railway.app |
 | Platform | Railway |
 | Ngày deploy | 2026-08-10 |
 
@@ -42,18 +42,18 @@ Thay `<URL>` bằng Public URL ở trên:
 
 ```bash
 # 1. Liveness — mong đợi 200 {"status":"ok"}
-curl -i https://k4-day12-2a202601990-phan-huy-hoang.up.railway.app/healthz
+curl -i https://k4-day12-2a202601990-phan-huy-hoang-production.up.railway.app/healthz
 
 # 2. Readiness — mong đợi 200 {"status":"ready"} (đã nối được Redis)
-curl -i https://k4-day12-2a202601990-phan-huy-hoang.up.railway.app/readyz
+curl -i https://k4-day12-2a202601990-phan-huy-hoang-production.up.railway.app/readyz
 
 # 3. Không có token — mong đợi 401 kèm header WWW-Authenticate
-curl -i -X POST https://k4-day12-2a202601990-phan-huy-hoang.up.railway.app/chat \
+curl -i -X POST https://k4-day12-2a202601990-phan-huy-hoang-production.up.railway.app/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"Hello"}'
 
 # 4. Có token — mong đợi 200 kèm câu trả lời
-curl -i -X POST https://k4-day12-2a202601990-phan-huy-hoang.up.railway.app/chat \
+curl -i -X POST https://k4-day12-2a202601990-phan-huy-hoang-production.up.railway.app/chat \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $API_TOKEN" \
   -H "X-Client-Id: sv-test" \
@@ -61,7 +61,7 @@ curl -i -X POST https://k4-day12-2a202601990-phan-huy-hoang.up.railway.app/chat 
 
 # 5. Rate limit — gọi 15 lần, những lần cuối phải trả 429
 for i in $(seq 1 15); do
-  curl -s -o /dev/null -w "%{http_code} " -X POST https://k4-day12-2a202601990-phan-huy-hoang.up.railway.app/chat \
+  curl -s -o /dev/null -w "%{http_code} " -X POST https://k4-day12-2a202601990-phan-huy-hoang-production.up.railway.app/chat \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $API_TOKEN" \
     -H "X-Client-Id: sv-test" \
