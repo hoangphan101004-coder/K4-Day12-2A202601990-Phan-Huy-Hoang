@@ -106,6 +106,26 @@ jobs:
             fi
           fi
 
+          variables_query=$(jq -nc \
+            --arg project "$project_id" \
+            --arg environment "$environment_id" \
+            --arg service "$service_id" '{
+              query: "query($project: String!, $environment: String!, $service: String) { variables(projectId: $project, environmentId: $environment, serviceId: $service) }",
+              variables: {
+                project: $project,
+                environment: $environment,
+                service: $service
+              }
+            }')
+          variables_response=$(curl --fail --silent --show-error \
+            https://backboard.railway.com/graphql/v2 \
+            -H "Project-Access-Token: $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "$variables_query")
+          variable_names=$(printf '%s\n' "$variables_response" | jq -r \
+            '.data.variables // {} | keys | sort | join(", ")')
+          echo "::notice title=Railway variable names::$variable_names"
+
           public_url="${{ vars.PUBLIC_URL }}"
           if [ -z "$public_url" ]; then
             public_url="https://k4-day12-2a202601990-phan-huy-hoang.up.railway.app"
