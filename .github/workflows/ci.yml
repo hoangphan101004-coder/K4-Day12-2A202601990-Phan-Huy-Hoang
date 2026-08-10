@@ -13,6 +13,7 @@ jobs:
   test:
     name: Run Unit Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       API_TOKEN: ci-dummy
       REDIS_URL: "fake://"
@@ -38,6 +39,7 @@ jobs:
   build:
     name: Build Docker Image
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -49,11 +51,31 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [test, build]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Validate Deploy Configuration
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+          RAILWAY_SERVICE_ID: ${{ vars.RAILWAY_SERVICE_ID }}
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+        run: |
+          for name in RAILWAY_TOKEN RAILWAY_PROJECT_ID RAILWAY_ENVIRONMENT_ID RAILWAY_SERVICE_ID PUBLIC_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing GitHub Actions configuration: $name"
+              exit 1
+            fi
+          done
+          case "$PUBLIC_URL" in
+            https://*) ;;
+            *) echo "::error::PUBLIC_URL must start with https://"; exit 1 ;;
+          esac
 
       - name: Deploy to Cloud
         env:
@@ -72,8 +94,10 @@ jobs:
         env:
           PUBLIC_URL: ${{ vars.PUBLIC_URL }}
         run: |
+          BASE_URL="${PUBLIC_URL%/}"
           for attempt in {1..12}; do
-            if curl --fail --silent --show-error --max-time 10 "$PUBLIC_URL/healthz"; then
+            if curl --fail --silent --show-error --max-time 10 "$BASE_URL/healthz" && \
+               curl --fail --silent --show-error --max-time 10 "$BASE_URL/readyz"; then
               exit 0
             fi
             sleep 10

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,12 +43,19 @@ class Settings(BaseSettings):
     )
 
     port: int = Field(default=8000, ge=1, le=65535)
-    api_token: str
+    api_token: str = Field(min_length=1)
     redis_url: str = "redis://localhost:6379/0"
     bucket_capacity: int = Field(default=10, gt=0)
     refill_per_minute: int = Field(default=10, ge=0)
     daily_budget_usd: float = Field(default=1.0, gt=0)
     log_level: str = "INFO"
+
+    @field_validator("api_token")
+    @classmethod
+    def api_token_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("API_TOKEN must not be blank")
+        return value
 
 
 

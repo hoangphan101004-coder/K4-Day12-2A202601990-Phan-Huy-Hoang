@@ -18,7 +18,7 @@ from functools import lru_cache
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from utils.mock_llm import generate_reply
 
@@ -73,6 +73,14 @@ app = FastAPI(title="Day 12 Chat Service", version=SERVICE_VERSION, lifespan=lif
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("message")
+    @classmethod
+    def message_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("message must not be blank")
+        return value
 
 
 # ─────────────────────────────────────────────────────────────

@@ -31,7 +31,13 @@ class ShutdownGuard:
 
     def arm(self) -> None:
         for sig in (signal.SIGTERM, signal.SIGINT):
-            self._previous[sig] = signal.getsignal(sig)
+            current = signal.getsignal(sig)
+            # Lifespan có thể được mở lại trong cùng process (test/reloader).
+            # Không lưu chính handler của mình làm "previous", nếu không tín
+            # hiệu kế tiếp sẽ gọi đệ quy vô hạn.
+            if current == self.start_draining:
+                continue
+            self._previous[sig] = current
             signal.signal(sig, self.start_draining)
 
 
