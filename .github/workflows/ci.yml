@@ -91,13 +91,33 @@ jobs:
           echo "$services" | jq -r \
             '.data.project.services.edges[]?.node | "::notice title=RAILWAY_SERVICE_ID::\(.name)=\(.id)"'
 
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          service_id=$(echo "$services" | jq -r --arg name "$repo_name" \
+            '.data.project.services.edges[]?.node | select(.name == $name) | .id' | head -n 1)
+          if [ -z "$service_id" ]; then
+            service_count=$(echo "$services" | jq \
+              '[.data.project.services.edges[]?.node] | length')
+            if [ "$service_count" -eq 1 ]; then
+              service_id=$(echo "$services" | jq -r \
+                '.data.project.services.edges[0].node.id')
+            else
+              echo "::error::Unable to select the application service automatically"
+              exit 1
+            fi
+          fi
+
+          public_url="${{ vars.PUBLIC_URL }}"
+          if [ -z "$public_url" ]; then
+            public_url="https://k4-day12-2a202601990-phan-huy-hoang.up.railway.app"
+          fi
+          echo "RAILWAY_PROJECT_ID=$project_id" >> "$GITHUB_ENV"
+          echo "RAILWAY_ENVIRONMENT_ID=$environment_id" >> "$GITHUB_ENV"
+          echo "RAILWAY_SERVICE_ID=$service_id" >> "$GITHUB_ENV"
+          echo "PUBLIC_URL=$public_url" >> "$GITHUB_ENV"
+
       - name: Validate Deploy Configuration
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-          RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
-          RAILWAY_SERVICE_ID: ${{ vars.RAILWAY_SERVICE_ID }}
-          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
         run: |
           missing=0
           for name in RAILWAY_TOKEN RAILWAY_PROJECT_ID RAILWAY_ENVIRONMENT_ID RAILWAY_SERVICE_ID PUBLIC_URL; do
@@ -117,9 +137,6 @@ jobs:
       - name: Deploy to Cloud
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-          RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
-          RAILWAY_SERVICE_ID: ${{ vars.RAILWAY_SERVICE_ID }}
         run: |
           npm install --global @railway/cli
           railway up --ci \
@@ -128,8 +145,6 @@ jobs:
             --service "$RAILWAY_SERVICE_ID"
 
       - name: Smoke Test
-        env:
-          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
         run: |
           BASE_URL="${PUBLIC_URL%/}"
           for attempt in {1..12}; do
