@@ -15,6 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
+from redis.exceptions import WatchError
 
 # Giữ dữ liệu chi tiêu vài ngày để còn đối soát
 KEY_TTL_SECONDS = 3 * 24 * 3600
@@ -36,13 +37,10 @@ class CostGuard:
         return f"spend:{client_id}:{day or cls.today()}"
 
     def spent(self, client_id: str, day: str | None = None) -> float:
-        """Số tiền client đã tiêu trong ngày.
-
-        TODO (CP3): đọc ``self.client.get(self._key(client_id, day))``.
-        Key chưa tồn tại → Redis trả None → hàm này phải trả ``0.0``.
-        Nhớ ép kiểu ``float(...)`` vì Redis trả về chuỗi.
-        """
-        raise NotImplementedError("TODO (CP3): cài đặt spent")
+        val = self.client.get(self._key(client_id, day))
+        if val is None:
+            return 0.0
+        return float(val)
 
     def check(
         self,
@@ -50,23 +48,55 @@ class CostGuard:
         estimated_cost: float = 0.0,
         day: str | None = None,
     ) -> None:
-        """Cho qua nếu còn ngân sách, ngược lại raise 402.
-
-        TODO (CP3): nếu ``spent(client_id) + estimated_cost > self.budget``
-        → raise ``HTTPException(status_code=402, detail="daily budget exceeded")``.
-        402 = Payment Required, đúng ngữ nghĩa cho tình huống hết ngân sách.
-        """
-        raise NotImplementedError("TODO (CP3): cài đặt check")
+        if self.spent(client_id, day) + estimated_cost > self.budget:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="daily budget exceeded",
+            )
 
     def record(self, client_id: str, cost: float, day: str | None = None) -> float:
-        """Cộng dồn chi phí vừa phát sinh, trả về tổng mới.
+        key = self._key(client_id, day)
+        total = self.client.incrbyfloat(key, cost)
+        self.client.expire(key, KEY_TTL_SECONDS)
+        return float(total)
 
-        TODO (CP3):
-          1. ``total = self.client.incrbyfloat(key, cost)``
-          2. ``self.client.expire(key, KEY_TTL_SECONDS)``
-          3. ``return float(total)``
+    def check_and_record(
+        self,
+        client_id: str,
+        cost: float,
+        day: str | None = None,
+    ) -> float:
+        """Chỉ ghi chi phí nếu tổng mới vẫn nằm trong ngân sách.
+
+        WATCH/MULTI ngăn hai request đồng thời cùng vượt qua bước kiểm tra trên
+        một số dư cũ rồi làm tổng chi phí vượt hạn mức.
         """
-        raise NotImplementedError("TODO (CP3): cài đặt record")
+        key = self._key(client_id, day)
+        for _ in range(10):
+            try:
+                with self.client.pipeline() as pipe:
+                    pipe.watch(key)
+                    raw = pipe.get(key)
+                    current = float(raw) if raw is not None else 0.0
+                    if current + cost > self.budget:
+                        pipe.unwatch()
+                        raise HTTPException(
+                            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                            detail="daily budget exceeded",
+                        )
+                    pipe.multi()
+                    pipe.incrbyfloat(key, cost)
+                    pipe.expire(key, KEY_TTL_SECONDS)
+                    result = pipe.execute()
+                    return float(result[0])
+            except WatchError:
+                continue
+
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="cost guard busy; retry request",
+        )
+
 
     def remaining(self, client_id: str, day: str | None = None) -> float:
         """CHO SẴN — còn bao nhiêu tiền trong ngân sách hôm nay."""

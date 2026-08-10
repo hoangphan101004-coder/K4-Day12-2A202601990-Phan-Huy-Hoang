@@ -9,13 +9,14 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Toàn bộ cấu hình của service.
 
-    TODO (CP1): khai báo các trường dưới đây. pydantic-settings tự đọc biến
+    pydantic-settings tự đọc các trường dưới đây từ biến
     môi trường theo tên trường (không phân biệt hoa thường), nên trường
     ``api_token`` sẽ lấy giá trị từ biến ``API_TOKEN``.
 
@@ -41,9 +42,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # TODO (CP1): khai báo 7 trường theo bảng trên, ví dụ:
-    #     port: int = 8000
-    #     api_token: str
+    port: int = Field(default=8000, ge=1, le=65535)
+    api_token: str
+    redis_url: str = "redis://localhost:6379/0"
+    bucket_capacity: int = Field(default=10, gt=0)
+    refill_per_minute: int = Field(default=10, ge=0)
+    daily_budget_usd: float = Field(default=1.0, gt=0)
+    log_level: str = "INFO"
+
 
 
 @lru_cache(maxsize=1)

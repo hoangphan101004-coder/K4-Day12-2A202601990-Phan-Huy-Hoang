@@ -6,7 +6,7 @@
 #
 # NHIỆM VỤ: bổ sung service `chat`. Yêu cầu:
 #   [ ] build từ Dockerfile trong thư mục hiện tại
-#   [ ] map cổng ra ngoài (8000:8000)
+#   [ ] mở cổng 8000 qua Nginx để một địa chỉ host phục vụ được nhiều replica
 #   [ ] KHÔNG viết secret thẳng vào file này — dùng nội suy biến môi trường
 #       `${API_TOKEN}` (docker compose tự đọc từ file .env cùng thư mục)
 #   [ ] REDIS_URL trỏ tới `redis://redis:6379/0` — trong compose, tên service
@@ -14,7 +14,7 @@
 #   [ ] depends_on: redis
 #   [ ] healthcheck gọi /healthz
 #
-# ĐIỂM CỘNG: thêm service `nginx` làm load balancer (nginx/nginx.conf đã có sẵn)
+# Service `nginx` làm load balancer bằng cấu hình trong nginx/nginx.conf:
 #     docker compose up --scale chat=3
 #
 # Kiểm tra: pytest tests/test_cp2.py -v
@@ -34,10 +34,31 @@ services:
       timeout: 3s
       retries: 5
 
-  # TODO (CP2): khai báo service `chat` ở đây
-  # chat:
-  #   build: .
-  #   ...
+  chat:
+    build: .
+    expose:
+      - "8000"
+    environment:
+      API_TOKEN: ${API_TOKEN}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8000:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      chat:
+        condition: service_healthy
 
 volumes:
   redis-data:

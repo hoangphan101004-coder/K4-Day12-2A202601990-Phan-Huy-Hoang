@@ -1,5 +1,9 @@
 # K4 — Ngày 12: Hạ Tầng Cloud & Deployment (14h00–18h00)
 
+![CI](https://github.com/hoangphan101004-coder/K4-Day12-2A202601990-Phan-Huy-Hoang/actions/workflows/ci.yml/badge.svg?branch=main)
+
+
+
 Đưa một chat service từ `localhost:8000` lên một địa chỉ công khai mà người khác
 gọi được, có bảo mật, có giới hạn chi phí, và không sập khi bạn deploy bản mới.
 
@@ -106,6 +110,11 @@ mà mất cả các block còn lại.
 viết một workflow GitHub Actions để mỗi lần push là tự chạy test, tự build
 image, và chỉ deploy khi mọi thứ xanh. Lab **không cho sẵn file mẫu** — đây là
 phần để bạn tự đọc tài liệu và tự dựng. Chỉ nên bắt đầu khi CP1–CP5 đã ổn.
+
+Workflow Railway trong repo cần GitHub Secret `RAILWAY_TOKEN` và bốn GitHub
+Variables: `RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT_ID`,
+`RAILWAY_SERVICE_ID`, `PUBLIC_URL`. Không đặt giá trị token trực tiếp trong
+YAML.
 
 Chi tiết từng bước: [LAB_GUIDE.md](LAB_GUIDE.md).
 
